@@ -13,6 +13,7 @@
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "declaration": true,
+    "declarationMap": true,
     "noImplicitReturns": false
   },
   "files": [],
