@@ -818,3 +818,4 @@ export function NxWelcome({ title }: { title: string }) {
 }
 
 export default NxWelcome;
+export const kk322222222 = 1;

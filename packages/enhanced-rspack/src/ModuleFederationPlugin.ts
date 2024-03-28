@@ -3,10 +3,20 @@ import {
   ModuleFederationPluginOptions,
   RspackPluginInstance,
 } from '@rspack/core';
+import path from 'path';
+import fs from 'fs';
 import { getIdentifier } from './utils';
-import { moduleFederationPlugin } from '@module-federation/sdk';
+import {
+  moduleFederationPlugin,
+  normalizeOptions,
+} from '@module-federation/sdk';
 import { StatsPlugin } from '@module-federation/manifest';
 import { ContainerManager } from '@module-federation/managers';
+import { DevPlugin } from '@module-federation/dev-plugin';
+import {
+  NativeFederationTypeScriptHost,
+  NativeFederationTypeScriptRemote,
+} from '@module-federation/native-federation-typescript/rspack';
 
 type ExcludeFalse<T> = T extends undefined | false ? never : T;
 type SplitChunks = Compiler['options']['optimization']['splitChunks'];
@@ -61,6 +71,9 @@ export class ModuleFederationPlugin implements RspackPluginInstance {
     options.implementation = options.implementation || RuntimeToolsPath;
     let disableManifest = options.manifest === false;
 
+    // @ts-ignore
+    new DevPlugin(options).apply(compiler);
+
     if (!disableManifest && options.exposes) {
       try {
         const containerManager = new ContainerManager();
@@ -90,6 +103,64 @@ export class ModuleFederationPlugin implements RspackPluginInstance {
         '@module-federation/runtime$': runtimeESMPath,
       };
     });
+
+    const isTSProject = (tsConfigPath?: string, context = process.cwd()) => {
+      try {
+        let filepath = tsConfigPath
+          ? tsConfigPath
+          : path.resolve(context, './tsconfig.json');
+        if (!path.isAbsolute(filepath)) {
+          filepath = path.resolve(context, filepath);
+        }
+        return fs.existsSync(filepath);
+      } catch (err) {
+        return false;
+      }
+    };
+    const normalizedDtsOptions =
+      normalizeOptions<moduleFederationPlugin.PluginDtsOptions>(
+        isTSProject(undefined, compiler.context),
+        {
+          disableGenerateTypes: false,
+          disableConsumeTypes: false,
+          remote: {
+            generateAPITypes: true,
+            compileInChildProcess: true,
+            abortOnError: false,
+            extractRemoteTypes: true,
+            extractThirdParty: true,
+          },
+          host: { abortOnError: false, consumeAPITypes: true },
+          extraOptions: {},
+        },
+        'mfOptions.dts',
+      )(options.dts);
+    if (typeof normalizedDtsOptions === 'object') {
+      if (!normalizedDtsOptions.disableGenerateTypes) {
+        NativeFederationTypeScriptRemote({
+          remote: {
+            implementation: normalizedDtsOptions.implementation,
+            context: compiler.context,
+            moduleFederationConfig: options,
+            ...normalizedDtsOptions.remote,
+          },
+          extraOptions: normalizedDtsOptions.extraOptions || {},
+          // @ts-ignore
+        }).apply(compiler);
+      }
+      if (!normalizedDtsOptions.disableConsumeTypes) {
+        NativeFederationTypeScriptHost({
+          host: {
+            implementation: normalizedDtsOptions.implementation,
+            context: compiler.context,
+            moduleFederationConfig: options,
+            ...normalizedDtsOptions.host,
+          },
+          extraOptions: normalizedDtsOptions.extraOptions || {},
+          // @ts-ignore
+        }).apply(compiler);
+      }
+    }
 
     if (!disableManifest) {
       new StatsPlugin(options, {

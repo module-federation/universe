@@ -20,7 +20,6 @@ export default defineConfig({
   dts: true,
   splitting: true,
   clean: true,
-  minify: true,
   format: ['cjs', 'esm'],
   outDir: 'packages/native-federation-typescript/dist',
   external: [join(__dirname, 'package.json')],
